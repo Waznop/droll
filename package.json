@@ -1,0 +1,32 @@
+{
+  "name": "droll",
+  "version": "1.0.0",
+  "description": "",
+  "main": "server.js",
+  "scripts": {
+    "build-dev": "esbuild src/index.js --bundle --outfile=public/bundle.js --define:process.env.NODE_ENV='\"development\"' --sourcemap --loader:.js=jsx",
+    "build-prod": "esbuild src/index.js --bundle --outfile=public/bundle.js --define:process.env.NODE_ENV='\"production\"' --minify --loader:.js=jsx",
+    "run-server": "node -r esm server.js"
+  },
+  "keywords": [],
+  "author": "",
+  "license": "ISC",
+  "dependencies": {
+    "@emotion/react": "^11.7.1",
+    "@emotion/styled": "^11.6.0",
+    "@mui/material": "^5.2.8",
+    "boardgame.io": "^0.43.2",
+    "enzyme": "^3.11.0",
+    "enzyme-adapter-react-16": "^1.15.6",
+    "esbuild": "^0.8.57",
+    "esm": "^3.2.25",
+    "koa-static": "^5.0.0",
+    "lodash": "^4.17.20",
+    "prop-types": "^15.7.2",
+    "react": "^17.0.1",
+    "react-dom": "^17.0.1",
+    "react-router": "^5.2.0",
+    "react-router-dom": "^5.2.0",
+    "superagent": "^6.1.0"
+  }
+}

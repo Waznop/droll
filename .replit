@@ -1,0 +1,5 @@
+# Development
+run="npm run build-dev && npm run run-server"
+
+# Production
+# run="rm public/bundle.js.map || npm run build-prod && npm run run-server"
