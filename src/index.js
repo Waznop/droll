@@ -4,7 +4,7 @@ import LobbyView from './lobby';
 
 ReactDOM.render(
   <React.StrictMode>
-    <LobbyView />,
+    <LobbyView />
   </React.StrictMode>,
   document.getElementById('app')
 );

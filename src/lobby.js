@@ -13,8 +13,8 @@ const importedGames = [{ game: Droll, board: DrollBoard }];
 const LobbyView = () => (
   <div style={{ padding: 50 }}>
     <Lobby
-      gameServer={`http://${hostname}:8000`}
-      lobbyServer={`http://${hostname}:8000`}
+      gameServer={`https://${hostname}`}
+      lobbyServer={`https://${hostname}`}
       gameComponents={importedGames}
     />
   </div>
