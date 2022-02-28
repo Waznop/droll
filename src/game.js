@@ -9,45 +9,17 @@ const START_REROLLS = 2;
 const DECK_COPIES = 3;
 const DISCOVER_SIZE = 3;
 
-const EFFECT = {
-  X: "nothing",
-
-  A: "attack",
-  B: "block",
-  D: "deal",
-  H: "heal",
-
-  W: "wind",
-  I: "ice",
-  F: "fire",
-  E: "earth",
-  V: "void",
-
-  S: "sneak",
-  G: "gank",
-
-  C: "collateral",
-  M: "mimic",
-  U: "upgrade",
-  P: "poison",
-
-  T: "token",
-  Q: "quick",
-  R: "reroll",
-
-  O: "old",
-  K: "keyword",
-
-  // Unused: J, L, N, Y, Z
-};
-
 export const SPELL = {
   Recruit: "V", // +1 party
   Rumble: "E", // (nB)A
+  Harden: "EV", // BBB
   Ambush: "WV", // G
+  Pierce: "WWV", // DDDD
   Fireball: "FVV", // AAAA
+  Fireblast: "FFV", // AAAAAA
+  Tranquility: "IV", // HH
   Crystallize: "IVVV", // no damage
-  Expand: "VVVVVVVVVV", // +1 slot
+  Expand: "VVVVVVVV", // +1 slot
 };
 
 const DICE = {
@@ -58,16 +30,16 @@ const DICE = {
   Blacksmith: ["X", "UU", "U", "U", "A", "F"], // fire
   Monk: ["X", "AB", "AH", "BH", "B", "W"], // wind
   Commander: ["X", "A", "TA", "TB", "B", "AB"],
-  Berserker: ["X", "AAAA", "C", "C", "AA", "I"], // ice
-  Warden: ["X", "BBBB", "C", "C", "BB", "E"], // earth
+  Berserker: ["X", "AAAA", "J", "N", "A", "I"], // ice
+  Warden: ["X", "BBBB", "P", "C", "B", "E"], // earth
 
   // Rogues
-  Bandit: ["X", "AA", "G", "G", "BB", "E"], // earth
+  Bandit: ["X", "D", "G", "G", "BB", "E"], // earth
   Hunter: ["X", "DD", "D", "D", "G", "F"], // fire
   Assassin: ["X", "SS", "SSS", "SSS", "A", "W"], // wind
   Pirate: ["X", "D", "CDD", "CDD", "B", "I"], // ice
-  Mechanic: ["X", "TD", "D", "D", "B", "E"], // earth
-  Thief: ["X", "G", "AP", "AP", "D", "I"], // ice
+  Mechanic: ["X", "TD", "D", "D", "BB", "E"], // earth
+  Thief: ["X", "P", "G", "G", "A", "I"], // ice
   Ninja: ["X", "QA", "G", "D", "A", "F"], // fire
   Bard: ["X", "QR", "G", "H", "B", "W"], // wind
 
@@ -75,11 +47,11 @@ const DICE = {
   Arcanist: ["X", "F", "E", "W", "I", "X"],
   Sorcerer: ["X", "VV", "V", "V", "VV", "X"],
   Cleric: ["X", "HH", "I", "I", "HH", "X"], // ice
+  Alchemist: ["X", "AP", "F", "F", "H", "X"], // fire
   Illusionist: ["X", "M", "W", "W", "H", "X"], // wind
-  Shaman: ["X", "TH", "E", "E", "H", "X"], // earth
-  Alchemist: ["X", "PP", "F", "F", "H", "X"], // fire
-  Warlock: ["X", "A", "AF", "BE", "B", "X"], // fire & earth
-  Druid: ["X", "QB", "I", "W", "H", "X"], // ice & wind
+  Shaman: ["X", "TH", "E", "E", "AH", "X"], // earth
+  Warlock: ["X", "AJ", "F", "W", "AA", "X"], // fire & wind
+  Druid: ["X", "QB", "E", "I", "BH", "X"], // earth & ice
 };
 
 function InitDeck(ctx) {
@@ -165,6 +137,28 @@ function AllPass(G, ctx) {
   return true;
 }
 
+function NextNotPass(G, ctx) {
+  for (let i = 0; i < ctx.playOrder.length; i++) {
+    let idx = (ctx.playOrderPos + 1 + i) % ctx.playOrder.length;
+    let player = ctx.playOrder[idx];
+    if (!G.field[player].pass) {
+      return idx;
+    }
+  }
+  return (ctx.playOrderPos + 1) % ctx.playOrder.length;
+}
+
+function FirstNotPass(G, ctx) {
+  for (let i = 0; i < ctx.playOrder.length; i++) {
+    let idx = (G.priority + i) % ctx.playOrder.length;
+    let player = ctx.playOrder[idx];
+    if (!G.field[player].pass) {
+      return idx;
+    }
+  }
+  return G.priority;
+}
+
 export function Sum(ids) {
   let sum = 0;
   for (let i = 0; i < ids.length; i++) {
@@ -177,19 +171,13 @@ export function Sum(ids) {
 
 function ApplyExtras(G, ctx) {
   for (let player of ctx.playOrder) {
-    let tokens = G.field[player].tokens;
-    let debuffs = G.field[player].debuffs;
-
-    for (let token of tokens) {
+    for (let token of G.field[player].tokens) {
       G.field[player].extras.push(["Token", token]);
     }
 
-    for (let debuff of debuffs) {
-      if (debuff === "P") {
-        G.field[player].extras.push(["Debuff", "C"]);
-      }
+    for (let debuff of G.field[player].debuffs) {
+      G.field[player].extras.push(["Debuff", debuff]);
     }
-
     Resolve(G, ctx, player);
   }
 }
@@ -198,7 +186,7 @@ function Resolve(G, ctx, player) {
   let impact = InitImpact();
   let sneaks = 0;
   let sneaksValid = true;
-  let ganks = 0;
+  let ganks = 1;
   let upgrades = 0;
 
   function Process(text) {
@@ -243,15 +231,15 @@ function Resolve(G, ctx, player) {
           }
           break;
         case "G":
-          ganks++;
+          ganks *= 2;
           break;
         case "U":
           upgrades++;
           break;
-
-        case "P":
-          impact.debuffs.push("P");
+        case "N":
+          upgrades--;
           break;
+
         case "Q":
           if (text[i + 1] === "R") {
             G.field[player].rerolls++;
@@ -266,6 +254,16 @@ function Resolve(G, ctx, player) {
         case "T":
           impact.tokens.push(text[i + 1]);
           i++;
+          break;
+        case "Y":
+          impact.debuffs.push(text[i + 1]);
+          i++;
+          break;
+        case "P":
+          impact.debuffs.push("C");
+          break;
+        case "J":
+          impact.debuffs.push("N");
           break;
         case "K":
           if (text.substring(i + 1) === "immune") {
@@ -284,21 +282,23 @@ function Resolve(G, ctx, player) {
     Process(extra[1]);
   }
 
-  impact.attack += ganks * ganks;
+  if (ganks > 1) {
+    impact.attack += ganks;
+  }
+  if (impact.attack > 0) {
+    impact.attack = Math.max(impact.attack + upgrades, 0);
+  }
   if (impact.attack > 0) {
     sneaksValid = false;
   }
   if (sneaksValid) {
     impact.deal += sneaks;
   }
-  if (impact.attack > 0) {
-    impact.attack += upgrades;
+  if (impact.deal > 0) {
+    impact.deal = Math.max(impact.deal + upgrades, 0);
   }
   if (impact.block > 0) {
-    impact.block += upgrades;
-  }
-  if (impact.deal > 0) {
-    impact.deal += upgrades;
+    impact.block = Math.max(impact.block + upgrades, 0);
   }
 
   G.field[player].impact = impact;
@@ -321,13 +321,12 @@ function Undiscover(G, ctx) {
   G.field.discover = [];
 }
 
-export function AfterCast(G, ctx, cost) {
-  let f = G.field[ctx.currentPlayer].impact.fire;
-  let e = G.field[ctx.currentPlayer].impact.earth;
-  let i = G.field[ctx.currentPlayer].impact.ice;
-  let w = G.field[ctx.currentPlayer].impact.wind;
-  let v =
-    G.field[ctx.currentPlayer].impact.void + G.field[ctx.currentPlayer].mana;
+export function AfterCast(G, ctx, player, cost) {
+  let f = G.field[player].impact.fire;
+  let e = G.field[player].impact.earth;
+  let i = G.field[player].impact.ice;
+  let w = G.field[player].impact.wind;
+  let v = G.field[player].impact.void + G.field[player].mana;
 
   for (let m of cost) {
     switch (m) {
@@ -356,15 +355,19 @@ export function AfterCast(G, ctx, cost) {
   return v >= 0 ? v : -1;
 }
 
-export function GetRecovery(G, ctx, player) {
-  return G.field[player].impact.heal - G.field[player].impact.collateral;
-}
-
 export function GetDamage(G, ctx, offense, defense) {
-  let attack = G.field[offense].impact.attack;
-  let deal = G.field[offense].impact.deal;
+  let attack = offense === "" ? 0 : G.field[offense].impact.attack;
+  let deal = offense === "" ? 0 : G.field[offense].impact.deal;
   let block = G.field[defense].impact.block;
-  return Math.max(attack - block, 0) + deal - GetRecovery(G, ctx, defense);
+  let heal = G.field[defense].impact.heal;
+  let immune = G.field[defense].impact.immune;
+
+  let damage = 0;
+  damage -= heal;
+  if (!immune) {
+    damage += Math.max(attack - block, 0) + deal;
+  }
+  return damage;
 }
 
 function ApplyDamage(G, ctx, offense, defense, damage) {
@@ -373,12 +376,12 @@ function ApplyDamage(G, ctx, offense, defense, damage) {
     if (debuffs.length > 0) {
       G.field[defense].debuffs = G.field[defense].debuffs.concat(debuffs);
     }
-    G.field[defense].hp = Math.max(0, G.field[defense].hp - damage);
+    G.field[defense].hp -= damage;
   }
 }
 
 function SendToRecovery(G, ctx, player) {
-  let value = {};
+  let value = ctx.activePlayers === null ? {} : ctx.activePlayers;
   value[player] = {
     stage: "recovery",
   };
@@ -391,6 +394,12 @@ function ApplyRecovery(G, ctx, player, recovery) {
   G.field[player].hp = Math.min(START_HP, G.field[player].hp + recovery);
 }
 
+function ApplyCollateral(G, ctx, player) {
+  if (!G.field[player].impact.immune) {
+    G.field[player].hp -= G.field[player].impact.collateral;
+  }
+}
+
 export function CanMimic(G, ctx, id) {
   let target = G.field[ctx.currentPlayer].rolls[id][1];
   return (
@@ -399,6 +408,34 @@ export function CanMimic(G, ctx, id) {
     target[0] !== "Q" &&
     target[0] !== "O"
   );
+}
+
+function MimicAllowed(G, ctx, player) {
+  let mCount = 0;
+  let invalid = 0;
+  for (let roll of G.field[player].rolls) {
+    if (roll[1][0] === "M") {
+      mCount++;
+    } else if (
+      roll[1][0] === "X" ||
+      roll[1][0] === "Q" ||
+      roll[1][0] === "O"
+    ) {
+      invalid++;
+    }
+  }
+  return (
+    mCount > 0 && mCount + invalid < G.field[ctx.currentPlayer].rolls.length
+  );
+}
+
+function SpellsAllowed(G, ctx, player) {
+  for (let cost of Object.values(SPELL)) {
+    if (AfterCast(G, ctx, player, cost) >= 0) {
+      return true;
+    }
+  }
+  return false;
 }
 
 export function CanTarget(G, ctx, player) {
@@ -449,7 +486,6 @@ function Reroll(G, ctx, ids) {
   if (Sum(ids) < 1) {
     return INVALID_MOVE;
   }
-  G.field[ctx.currentPlayer].pass = false;
   G.field[ctx.currentPlayer].rerolls--;
   for (let i = 0; i < ids.length; i++) {
     if (ids[i]) {
@@ -459,6 +495,9 @@ function Reroll(G, ctx, ids) {
     }
   }
   Resolve(G, ctx, ctx.currentPlayer);
+  for (let player of ctx.playOrder) {
+    G.field[player].pass = G.field[player].rerolls <= 0;
+  }
   ctx.events.endTurn();
 }
 
@@ -470,7 +509,7 @@ function Pass(G, ctx) {
 function Ready(G, ctx) {}
 
 function NoCast(G, ctx) {
-  G.field[ctx.currentPlayer].mana = AfterCast(G, ctx, "");
+  G.field[ctx.currentPlayer].mana = AfterCast(G, ctx, ctx.currentPlayer, "");
   Pass(G, ctx);
 }
 
@@ -511,7 +550,7 @@ function Cast(G, ctx, id) {
   }
   let spell = Object.keys(SPELL)[id];
   let cost = SPELL[spell];
-  let remaining = AfterCast(G, ctx, cost);
+  let remaining = AfterCast(G, ctx, ctx.currentPlayer, cost);
   if (remaining < 0) {
     return INVALID_MOVE;
   }
@@ -520,19 +559,38 @@ function Cast(G, ctx, id) {
   switch (spell) {
     case "Rumble":
       let blockCount = G.field[ctx.currentPlayer].impact.block;
-      if (blockCount > 0) {
-        G.field[ctx.currentPlayer].extras.push([spell, "A".repeat(blockCount)]);
-        Resolve(G, ctx, ctx.currentPlayer);
-        Pass(G, ctx);
-      }
+      G.field[ctx.currentPlayer].extras.push(
+        [spell, blockCount > 0 ? "A".repeat(blockCount) : "X"]);
+      Resolve(G, ctx, ctx.currentPlayer);
+      Pass(G, ctx);
+      break;
+    case "Harden":
+      G.field[ctx.currentPlayer].extras.push([spell, "BBB"]);
+      Resolve(G, ctx, ctx.currentPlayer);
+      Pass(G, ctx);
       break;
     case "Ambush":
       G.field[ctx.currentPlayer].extras.push([spell, "G"]);
       Resolve(G, ctx, ctx.currentPlayer);
       Pass(G, ctx);
       break;
+    case "Pierce":
+      G.field[ctx.currentPlayer].extras.push([spell, "DDDD"]);
+      Resolve(G, ctx, ctx.currentPlayer);
+      Pass(G, ctx);
+      break;
     case "Fireball":
       G.field[ctx.currentPlayer].extras.push([spell, "AAAA"]);
+      Resolve(G, ctx, ctx.currentPlayer);
+      Pass(G, ctx);
+      break;
+    case "Fireblast":
+      G.field[ctx.currentPlayer].extras.push([spell, "AAAAAA"]);
+      Resolve(G, ctx, ctx.currentPlayer);
+      Pass(G, ctx);
+      break;
+    case "Tranquility":
+      G.field[ctx.currentPlayer].extras.push([spell, "HH"]);
       Resolve(G, ctx, ctx.currentPlayer);
       Pass(G, ctx);
       break;
@@ -564,6 +622,25 @@ function SelectTarget(G, ctx, player) {
   G.field[player].target = ctx.currentPlayer;
   G.field[ctx.currentPlayer].target = player;
   Pass(G, ctx);
+}
+
+function DefaultTarget(G, ctx) {
+  let available = [];
+  for (let player of ctx.playOrder) {
+    if (G.field[player].target !== "") {
+      G.field[player].pass = true;
+    } else {
+      available.push(player);
+    }
+  }
+  if (available.length === 2) {
+    G.field[available[0]].target = available[1];
+    G.field[available[1]].target = available[0];
+    G.field[available[0]].pass = true;
+    G.field[available[1]].pass = true;
+  } else if (available.length === 1) {
+    G.field[available[0]].pass = true;
+  }
 }
 
 function AssignDamage(G, ctx, ids) {
@@ -600,10 +677,7 @@ function AssignRecovery(G, ctx, ids) {
   }
 
   let target = G.field[ctx.playerID].target;
-  let recovery =
-    target === ""
-      ? GetRecovery(G, ctx, ctx.playerID)
-      : -1 * GetDamage(G, ctx, target, ctx.playerID);
+  let recovery = -1 * GetDamage(G, ctx, target, ctx.playerID);
   if (recovery <= 0) {
     return INVALID_MOVE;
   }
@@ -710,14 +784,9 @@ export const Droll = {
         Pass,
       },
       turn: {
-        onBegin: (G, ctx) => {
-          if (G.field[ctx.currentPlayer].rerolls <= 0) {
-            Pass(G, ctx);
-          }
-        },
         order: {
-          first: (G, ctx) => G.priority,
-          next: (G, ctx) => (ctx.playOrderPos + 1) % ctx.playOrder.length,
+          first: FirstNotPass,
+          next: NextNotPass,
           playOrder: (G, ctx) => [...G.alive],
         },
       },
@@ -731,34 +800,20 @@ export const Droll = {
         Pass,
       },
       turn: {
-        onBegin: (G, ctx) => {
-          let mCount = 0;
-          let invalid = 0;
-          for (let roll of G.field[ctx.currentPlayer].rolls) {
-            if (roll[1][0] === "M") {
-              mCount++;
-            } else if (
-              roll[1][0] === "Q" ||
-              roll[1][0] === "O" ||
-              roll[1][0] === "X"
-            ) {
-              invalid++;
-            }
-          }
-          if (
-            mCount === 0 ||
-            mCount + invalid === G.field[ctx.currentPlayer].rolls.length
-          ) {
-            Pass(G, ctx);
-          }
-        },
         order: {
-          first: (G, ctx) => G.priority,
-          next: (G, ctx) => (ctx.playOrderPos + 1) % ctx.playOrder.length,
+          first: FirstNotPass,
+          next: NextNotPass,
           playOrder: (G, ctx) => [...G.alive],
         },
       },
       endIf: AllPass,
+      onBegin: (G, ctx) => {
+        for (let player of ctx.playOrder) {
+          if (!MimicAllowed(G, ctx, player)) {
+            G.field[player].pass = true;
+          }
+        }
+      },
       onEnd: ResetPass,
       next: "spells",
     },
@@ -775,18 +830,6 @@ export const Droll = {
             },
           },
         },
-        onBegin: (G, ctx) => {
-          let noSpells = true;
-          for (let cost of Object.values(SPELL)) {
-            if (AfterCast(G, ctx, cost) >= 0) {
-              noSpells = false;
-              break;
-            }
-          }
-          if (noSpells) {
-            NoCast(G, ctx);
-          }
-        },
         onMove: (G, ctx) => {
           if (G.field.shouldDiscover) {
             Discover(G, ctx, DISCOVER_SIZE);
@@ -799,12 +842,20 @@ export const Droll = {
           }
         },
         order: {
-          first: (G, ctx) => G.priority,
-          next: (G, ctx) => (ctx.playOrderPos + 1) % ctx.playOrder.length,
+          first: FirstNotPass,
+          next: NextNotPass,
           playOrder: (G, ctx) => [...G.alive],
         },
       },
       endIf: AllPass,
+      onBegin: (G, ctx) => {
+        for (let player of ctx.playOrder) {
+          if (!SpellsAllowed(G, ctx, player)) {
+            G.field[player].mana = AfterCast(G, ctx, player, "");
+            G.field[player].pass = true;
+          }
+        }
+      },
       onEnd: (G, ctx) => {
         for (let player of ctx.playOrder) {
           G.field[player].tokens = G.field[player].tokens.concat(
@@ -820,34 +871,15 @@ export const Droll = {
         SelectTarget,
       },
       turn: {
-        onBegin: (G, ctx) => {
-          if (G.field[ctx.currentPlayer].target !== "") {
-            Pass(G, ctx);
-          } else {
-            let available = [];
-            for (let player of ctx.playOrder) {
-              if (
-                player !== ctx.currentPlayer &&
-                G.field[player].target === ""
-              ) {
-                available.push(player);
-              }
-            }
-
-            if (available.length === 0) {
-              Pass(G, ctx);
-            } else if (available.length === 1) {
-              SelectTarget(G, ctx, available[0]);
-            }
-          }
-        },
+        onMove: DefaultTarget,
         order: {
-          first: (G, ctx) => G.priority,
-          next: (G, ctx) => (ctx.playOrderPos + 1) % ctx.playOrder.length,
+          first: FirstNotPass,
+          next: NextNotPass,
           playOrder: (G, ctx) => [...G.alive],
         },
       },
       endIf: AllPass,
+      onBegin: DefaultTarget,
       onEnd: ResetPass,
       next: "resolve",
     },
@@ -863,42 +895,51 @@ export const Droll = {
             },
           },
         },
-        onBegin: (G, ctx) => {
-          let target = G.field[ctx.currentPlayer].target;
-          if (target === "") {
-            let recovery = GetRecovery(G, ctx, ctx.currentPlayer);
-            if (G.field[ctx.currentPlayer].debuffs.length === 0) {
-              ApplyRecovery(G, ctx, ctx.currentPlayer, recovery);
-              Pass(G, ctx);
-            } else {
-              SendToRecovery(G, ctx, ctx.currentPlayer);
-            }
-          } else {
-            let damage = GetDamage(G, ctx, ctx.currentPlayer, target);
-            if (damage > 0) {
-              if (G.field[target].tokens.length === 0) {
-                ApplyDamage(G, ctx, ctx.currentPlayer, target, damage);
-                Pass(G, ctx);
-              }
-            } else if (damage < 0) {
-              if (G.field[target].debuffs.length === 0) {
-                ApplyRecovery(G, ctx, target, -1 * damage);
-                Pass(G, ctx);
-              } else {
-                SendToRecovery(G, ctx, target);
-              }
-            } else {
-              Pass(G, ctx);
-            }
-          }
-        },
         order: {
-          first: (G, ctx) => G.priority,
-          next: (G, ctx) => (ctx.playOrderPos + 1) % ctx.playOrder.length,
+          first: FirstNotPass,
+          next: NextNotPass,
           playOrder: (G, ctx) => [...G.alive],
         },
       },
       endIf: AllPass,
+      onBegin: (G, ctx) => {
+        for (let player of ctx.playOrder) {
+            ApplyCollateral(G, ctx, player);
+        }
+        for (let player of ctx.playOrder) {
+          let target = G.field[player].target;
+          if (target === "") {
+            let recovery = -1 * GetDamage(G, ctx, "", player);
+            if (recovery > 0) {
+              if (G.field[player].debuffs.length === 0) {
+                ApplyRecovery(G, ctx, player, recovery);
+                G.field[player].pass = true;
+              } else {
+                SendToRecovery(G, ctx, player);
+              }
+            } else {
+              G.field[player].pass = true;
+            }
+          } else {
+            let damage = GetDamage(G, ctx, player, target);
+            if (damage > 0) {
+              if (G.field[target].tokens.length === 0) {
+                ApplyDamage(G, ctx, player, target, damage);
+                G.field[player].pass = true;
+              }
+            } else if (damage < 0) {
+              if (G.field[target].debuffs.length === 0) {
+                ApplyRecovery(G, ctx, target, -1 * damage);
+                G.field[player].pass = true;
+              } else {
+                SendToRecovery(G, ctx, target);
+              }
+            } else {
+              G.field[player].pass = true;
+            }
+          }
+        }
+      },
       onEnd: (G, ctx) => {
         let alive = [];
         let justDied = [];

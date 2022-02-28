@@ -13,8 +13,42 @@ import {
   CanMimic,
   CanTarget,
   GetDamage,
-  GetRecovery,
 } from "./game";
+
+const EFFECT = {
+  X: "💤",
+
+  A: "⚔️",
+  B: "🛡️",
+  D: "🏹",
+  H: "❤️",
+
+  W: "🌪️",
+  I: "🧊",
+  F: "🔥",
+  E: "⛰️",
+  V: "🔮",
+
+  S: "🐱‍👤",
+  G: "🤝",
+
+  C: "☠️",
+  P: "💉",
+  M: "🎭",
+  U: "💎",
+  N: "😱",
+  J: "👻",
+
+  T: "🧍",
+  Y: "💥",
+  Q: "💨",
+  R: "🎲",
+
+  O: "old",
+  K: "keyword",
+
+  // Unused: L, Z
+};
 
 export class DrollBoard extends React.Component {
   constructor(props) {
@@ -144,9 +178,7 @@ export class DrollBoard extends React.Component {
 
   _availableRecovery(playerID) {
     let target = this.props.G.field[playerID].target;
-    return target === ""
-      ? GetRecovery(this.props.G, this.props.ctx, playerID)
-      : GetDamage(this.props.G, this.props.ctx, target, playerID) * -1;
+    return -1 * GetDamage(this.props.G, this.props.ctx, target, playerID);
   }
 
   _canRecoverDebuffs(playerID) {
@@ -179,6 +211,9 @@ export class DrollBoard extends React.Component {
       ids.push(this.state[playerID].indexOf(i) > -1 ? 1 : 0);
     }
     this.props.moves.Reroll(ids);
+    this.setState((state, props) => {
+      return { ...state, [playerID]: [] };
+    });
   }
 
   _onMimic(playerID) {
@@ -194,6 +229,9 @@ export class DrollBoard extends React.Component {
       this.props.moves.NoCast();
     } else {
       this.props.moves.Cast(this.state.spell);
+      this.setState((state, props) => {
+        return { ...state, spell: null };
+      });
     }
   }
 
@@ -220,6 +258,14 @@ export class DrollBoard extends React.Component {
 
   _onReady() {
     this.props.moves.Ready();
+  }
+
+  _translate(roll) {
+    let out = "";
+    for (let effect of roll) {
+      out += EFFECT[effect];
+    }
+    return out;
   }
 
   _renderField() {
@@ -256,7 +302,10 @@ export class DrollBoard extends React.Component {
           size="small"
           value={target}
           key={target}
-          disabled={!CanTarget(this.props.G, this.props.ctx, target)}
+          disabled={
+            !this._playerActive(this.props.playerID) ||
+            !CanTarget(this.props.G, this.props.ctx, target)
+          }
         >
           Player {Number(target) + 1}
         </ToggleButton>
@@ -289,7 +338,15 @@ export class DrollBoard extends React.Component {
           size="small"
           value={i}
           key={i}
-          disabled={AfterCast(this.props.G, this.props.ctx, SPELL[spell]) < 0}
+          disabled={
+            !this._playerActive(this.props.playerID) ||
+            AfterCast(
+              this.props.G,
+              this.props.ctx,
+              this.props.ctx.currentPlayer,
+              SPELL[spell]
+            ) < 0
+          }
         >
           {spell}
         </ToggleButton>
@@ -336,7 +393,7 @@ export class DrollBoard extends React.Component {
               !CanMimic(this.props.G, this.props.ctx, i)
             }
           >
-            {die}: {roll[0] === "O" ? "Q" + roll.substring(1) : roll}
+            {die}: {this._translate(roll[0] === "O" ? "Q" + roll.substring(1) : roll)}
           </ToggleButton>
         );
       });
@@ -408,7 +465,7 @@ export class DrollBoard extends React.Component {
     this.props.G.field[id].tokens.forEach((token, i) => {
       tokens.push(
         <ToggleButton size="small" value={i} key={i}>
-          {token}
+          {this._translate(token)}
         </ToggleButton>
       );
     });
@@ -417,7 +474,7 @@ export class DrollBoard extends React.Component {
     this.props.G.field[id].debuffs.forEach((debuff, i) => {
       debuffs.push(
         <ToggleButton size="small" value={i} key={i}>
-          {debuff}
+          {this._translate(debuff)}
         </ToggleButton>
       );
     });
@@ -562,9 +619,9 @@ export class DrollBoard extends React.Component {
     let extraText = "";
     for (let [desc, effect] of this.props.G.field[id].extras) {
       if (SPELL[desc] !== undefined) {
-        extraText += "Casted " + desc + " for " + SPELL[desc] + "\n";
+        extraText += "Casted " + desc + " for " + this._translate(SPELL[desc]) + "\n";
       }
-      let redacted = effect[0] === "K" ? effect.substring(1) : effect;
+      let redacted = effect[0] === "K" ? effect.substring(1) : this._translate(effect);
       extraText += desc + ": " + redacted + "\n";
     }
 
@@ -576,7 +633,17 @@ export class DrollBoard extends React.Component {
           </Typography>
         </Grid>
       </Grid>
-    );
+    )
+
+    let pass = (
+      <Grid container direction="row">
+        <Grid item xs>
+          <Typography textAlign="center" color="text.secondary" variant="body2">
+            Pass: {this.props.G.field[id].pass ? "yes" : "no"}
+          </Typography>
+        </Grid>
+      </Grid>
+    )
 
     let target = (
       <Grid container direction="row">
@@ -684,7 +751,7 @@ export class DrollBoard extends React.Component {
         <Grid container direction="row" sx={{ my: 2 }}>
           <Grid item xs>
             <Typography textAlign="center" variant="h6">
-              A
+              ⚔️
             </Typography>
             <Typography textAlign="center" variant="h6">
               {this.props.G.field[id].impact.attack}
@@ -692,7 +759,7 @@ export class DrollBoard extends React.Component {
           </Grid>
           <Grid item xs>
             <Typography textAlign="center" variant="h6">
-              B
+              🛡️
             </Typography>
             <Typography textAlign="center" variant="h6">
               {this.props.G.field[id].impact.block}
@@ -700,7 +767,7 @@ export class DrollBoard extends React.Component {
           </Grid>
           <Grid item xs>
             <Typography textAlign="center" variant="h6">
-              D
+              🏹
             </Typography>
             <Typography textAlign="center" variant="h6">
               {this.props.G.field[id].impact.deal}
@@ -708,7 +775,7 @@ export class DrollBoard extends React.Component {
           </Grid>
           <Grid item xs>
             <Typography textAlign="center" variant="h6">
-              H
+              ❤️
             </Typography>
             <Typography textAlign="center" variant="h6">
               {this.props.G.field[id].impact.heal}
@@ -716,7 +783,7 @@ export class DrollBoard extends React.Component {
           </Grid>
           <Grid item xs>
             <Typography textAlign="center" variant="h6">
-              C
+              ☠️
             </Typography>
             <Typography textAlign="center" variant="h6">
               {this.props.G.field[id].impact.collateral}
@@ -724,7 +791,7 @@ export class DrollBoard extends React.Component {
           </Grid>
           <Grid item xs>
             <Typography textAlign="center" variant="h6">
-              F
+              🔥
             </Typography>
             <Typography textAlign="center" variant="h6">
               {this.props.G.field[id].impact.fire}
@@ -732,7 +799,7 @@ export class DrollBoard extends React.Component {
           </Grid>
           <Grid item xs>
             <Typography textAlign="center" variant="h6">
-              E
+              ⛰️
             </Typography>
             <Typography textAlign="center" variant="h6">
               {this.props.G.field[id].impact.earth}
@@ -740,7 +807,7 @@ export class DrollBoard extends React.Component {
           </Grid>
           <Grid item xs>
             <Typography textAlign="center" variant="h6">
-              I
+              🧊
             </Typography>
             <Typography textAlign="center" variant="h6">
               {this.props.G.field[id].impact.ice}
@@ -748,7 +815,7 @@ export class DrollBoard extends React.Component {
           </Grid>
           <Grid item xs>
             <Typography textAlign="center" variant="h6">
-              W
+              🌪️
             </Typography>
             <Typography textAlign="center" variant="h6">
               {this.props.G.field[id].impact.wind}
@@ -756,7 +823,7 @@ export class DrollBoard extends React.Component {
           </Grid>
           <Grid item xs>
             <Typography textAlign="center" variant="h6">
-              V
+              🔮
             </Typography>
             <Typography textAlign="center" variant="h6">
               {this.props.G.field[id].impact.void}
